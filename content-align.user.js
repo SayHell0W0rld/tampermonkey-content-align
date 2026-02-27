@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         网页内容对齐助手
 // @namespace    https://github.com/eli
-// @version      14.0.0
+// @version      14.2.0
 // @description  网页内容对齐 + 阅读辅助（仿生阅读、阅读尺、段落色彩交替等）
 // @author       eli
 // @license      MIT
@@ -175,7 +175,7 @@
     let css = '';
 
     if (readActive.has('bionic')) {
-      css += `[data-ca-bionic] { font-weight: inherit !important; } [data-ca-bionic] b { font-weight: 800 !important; }`;
+      css += `[data-ca-bionic] { font-weight: inherit !important; } [data-ca-bionic] b { font-weight: 800 !important; } [data-ca-bionic] i { font-style: normal !important; opacity: 0.75 !important; }`;
     }
     if (readActive.has('line-focus') || readActive.has('zebra')) {
       css += `[data-ca-zebra], [data-ca-line] { transition: opacity 0.15s ease-out, background 0.15s ease-out !important; }`;
@@ -256,18 +256,20 @@
   function dimSiblings(block) {
     const parent = block.parentElement;
     if (!parent) return;
+    const hasCalm = readActive.has('calm-bg');
     for (const sib of parent.children) {
       if (sib === block) continue;
       const st = getComputedStyle(sib);
       if (st.position === 'fixed' || st.position === 'absolute' || st.display === 'none') continue;
       sib.setAttribute('data-ca-managed', '1');
-      sib.style.opacity = '0.3';
-      sib.style.filter = 'blur(1px)';
-      sib.style.background = 'rgba(0, 0, 0, 0.5)';
+      sib.style.opacity = hasCalm ? '0.4' : '0.3';
+      sib.style.filter = hasCalm ? 'none' : 'blur(1px)';
+      sib.style.background = hasCalm ? 'rgba(0, 0, 0, 0.1)' : 'rgba(0, 0, 0, 0.5)';
     }
   }
 
   function dimAncestorSiblings(block) {
+    const hasCalm = readActive.has('calm-bg');
     let ancestor = block.parentElement;
     while (ancestor && ancestor !== document.body) {
       for (const sib of ancestor.children) {
@@ -276,9 +278,9 @@
         if (st.position === 'fixed' || st.position === 'absolute' || st.display === 'none') continue;
         if (!sib.hasAttribute('data-ca-managed')) {
           sib.setAttribute('data-ca-managed', '1');
-          sib.style.opacity = '0.3';
-          sib.style.filter = 'blur(1px)';
-          sib.style.background = 'rgba(0, 0, 0, 0.5)';
+          sib.style.opacity = hasCalm ? '0.4' : '0.3';
+          sib.style.filter = hasCalm ? 'none' : 'blur(1px)';
+          sib.style.background = hasCalm ? 'rgba(0, 0, 0, 0.1)' : 'rgba(0, 0, 0, 0.5)';
         }
       }
       ancestor = ancestor.parentElement;
@@ -436,19 +438,24 @@
 
   function bionicTransform(word) {
     if (/^\s+$/.test(word)) return word;
-    // 纯空格或标点跳过
-    if (/^[，。！？、；：""''（）【】《》…—\-,.!?;:'"()\[\]<>]+$/.test(word)) return word;
+    if (/^[，。！？、；：\"‘’“”（）【】《》…—\-,.!?;:'"()\[\]<>]+$/.test(word)) return word;
 
     const len = word.length;
-    // CJK：加粗前 1-2 个字符
+    let boldLen;
     if (isCJK(word[0])) {
-      const boldLen = len <= 2 ? 1 : Math.min(2, Math.ceil(len * 0.3));
-      return `<span data-ca-bionic="1"><b>${word.slice(0, boldLen)}</b>${word.slice(boldLen)}</span>`;
+      // CJK: bold first 1-2 chars per phrase
+      boldLen = len <= 2 ? 1 : Math.min(2, Math.ceil(len * 0.3));
+    } else {
+      // Jiffy Reader: word-length dependent fixation points
+      if (len <= 1) boldLen = 0;       // single letter: skip
+      else if (len <= 3) boldLen = 1;  // 2-3 letters: 1 fixation
+      else if (len <= 4) boldLen = 2;  // 4 letters: 2 fixations
+      else boldLen = Math.ceil(len * 0.4); // 5+: ~40%
     }
-    // 英文：加粗前 40%
-    const boldLen = Math.max(1, Math.ceil(len * 0.4));
-    return `<span data-ca-bionic="1"><b>${word.slice(0, boldLen)}</b>${word.slice(boldLen)}</span>`;
+    if (boldLen === 0) return `<span data-ca-bionic="1">${word}</span>`;
+    return `<span data-ca-bionic="1"><b>${word.slice(0, boldLen)}</b><i>${word.slice(boldLen)}</i></span>`;
   }
+
 
   function applyBionic() {
     ensureReadStyle();
