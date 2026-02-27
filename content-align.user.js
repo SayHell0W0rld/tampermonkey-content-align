@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         网页内容对齐助手
 // @namespace    https://github.com/eli
-// @version      14.2.0
+// @version      14.3.0
 // @description  网页内容对齐 + 阅读辅助（仿生阅读、阅读尺、段落色彩交替等）
 // @author       eli
 // @license      MIT
@@ -66,6 +66,15 @@
     const p = getPrefs(); p[key] = val;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
   }
+
+  // 仿生阅读配置
+  const BIONIC_KEY = 'content-align-bionic-config';
+  const BIONIC_DEFAULTS = { fixation: 1, saccades: 0, fade: true };
+  function getBionicConfig() {
+    try { return { ...BIONIC_DEFAULTS, ...JSON.parse(localStorage.getItem(BIONIC_KEY) || '{}') }; }
+    catch { return { ...BIONIC_DEFAULTS }; }
+  }
+  function saveBionicConfig(cfg) { localStorage.setItem(BIONIC_KEY, JSON.stringify(cfg)); }
 
   // ============================================================
   // 样式
@@ -177,16 +186,11 @@
     if (readActive.has('bionic')) {
       css += `[data-ca-bionic] { font-weight: inherit !important; } [data-ca-bionic] b { font-weight: 800 !important; } [data-ca-bionic] i { font-style: normal !important; opacity: 0.75 !important; }`;
     }
-    if (readActive.has('line-focus') || readActive.has('zebra')) {
-      css += `[data-ca-zebra], [data-ca-line] { transition: opacity 0.15s ease-out, background 0.15s ease-out !important; }`;
+    if (readActive.has('zebra')) {
+      css += `[data-ca-zebra] { transition: opacity 0.15s ease-out, background 0.15s ease-out !important; }`;
     }
     if (readActive.has('calm-bg')) {
-      css += `
-        body { background-color: #f5f0e8 !important; color: #3d3425 !important; transition: background-color 0.3s ease, color 0.3s ease !important; }
-        body *:not([data-ca-managed]) { color: inherit !important; }
-        a { color: #5a7d9a !important; }
-        ::selection { background: rgba(79, 195, 247, 0.3) !important; }
-      `;
+      css += `::selection { background: rgba(79, 195, 247, 0.3) !important; }`;
     }
     readStyleEl.textContent = css;
   }
@@ -436,23 +440,30 @@
     return tokens;
   }
 
-  function bionicTransform(word) {
+  function bionicTransform(word, wordIdx) {
     if (/^\s+$/.test(word)) return word;
-    if (/^[，。！？、；：\"‘’“”（）【】《》…—\-,.!?;:'"()\[\]<>]+$/.test(word)) return word;
+    if (/^[，。！？、；：\"''""（）【】《》…—\-,.!?;:'"()\[\]<>]+$/.test(word)) return word;
+
+    const cfg = getBionicConfig();
+    // Saccades: skip every N words
+    if (cfg.saccades > 0 && wordIdx !== undefined && wordIdx % (cfg.saccades + 1) !== 0) {
+      return `<span data-ca-bionic="1">${word}</span>`;
+    }
 
     const len = word.length;
+    const f = cfg.fixation; // fixation multiplier
     let boldLen;
     if (isCJK(word[0])) {
-      // CJK: bold first 1-2 chars per phrase
-      boldLen = len <= 2 ? 1 : Math.min(2, Math.ceil(len * 0.3));
+      boldLen = len <= 2 ? 1 : Math.min(2, Math.ceil(len * 0.3 * f));
     } else {
-      // Jiffy Reader: word-length dependent fixation points
-      if (len <= 1) boldLen = 0;       // single letter: skip
-      else if (len <= 3) boldLen = 1;  // 2-3 letters: 1 fixation
-      else if (len <= 4) boldLen = 2;  // 4 letters: 2 fixations
-      else boldLen = Math.ceil(len * 0.4); // 5+: ~40%
+      if (len <= 1) boldLen = 0;
+      else if (len <= 3) boldLen = 1;
+      else if (len <= 4) boldLen = Math.max(2, Math.ceil(2 * f));
+      else boldLen = Math.max(1, Math.ceil(len * 0.4 * f));
     }
+    boldLen = Math.min(boldLen, len);
     if (boldLen === 0) return `<span data-ca-bionic="1">${word}</span>`;
+    if (!cfg.fade) return `<span data-ca-bionic="1"><b>${word.slice(0, boldLen)}</b>${word.slice(boldLen)}</span>`;
     return `<span data-ca-bionic="1"><b>${word.slice(0, boldLen)}</b><i>${word.slice(boldLen)}</i></span>`;
   }
 
@@ -469,7 +480,8 @@
       if (!text || !text.trim()) return;
 
       const tokens = tokenize(text);
-      const html = tokens.map(t => bionicTransform(t)).join('');
+      let wordIdx = 0;
+      const html = tokens.map(t => { const i = wordIdx; if (!/^\s+$/.test(t) && !/^[，。！？]/.test(t)) wordIdx++; return bionicTransform(t, i); }).join('');
       const span = document.createElement('span');
       span.innerHTML = html;
       node.parentNode.replaceChild(span, node);
@@ -709,9 +721,120 @@
     if (m) m.remove(); contentMenuOpen = false;
   }
 
+  let bionicConfigOpen = false;
+
+  function openBionicConfig(anchorEl) {
+    const old = document.getElementById('__ca_bionic_config__');
+    if (old) { old.remove(); bionicConfigOpen = false; return; }
+    bionicConfigOpen = true;
+    const cfg = getBionicConfig();
+
+    const panel = document.createElement('div');
+    panel.id = '__ca_bionic_config__';
+    Object.assign(panel.style, {
+      position: 'fixed', bottom: '140px', right: '26px',
+      background: 'rgba(30, 30, 30, 0.97)', borderRadius: '10px',
+      padding: '12px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
+      zIndex: '2147483647', minWidth: '220px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    });
+
+    function addRow(label, options, value, onChange) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin:6px 0;';
+      const lbl = document.createElement('span');
+      lbl.textContent = label;
+      lbl.style.cssText = 'color:#ccc;font-size:12px;';
+      row.appendChild(lbl);
+      const sel = document.createElement('select');
+      sel.style.cssText = 'background:#444;color:#fff;border:1px solid #666;border-radius:4px;padding:2px 4px;font-size:11px;cursor:pointer;';
+      for (const [val, text] of options) {
+        const opt = document.createElement('option');
+        opt.value = val; opt.textContent = text;
+        if (val == value) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener('change', () => { onChange(sel.value); });
+      row.appendChild(sel);
+      return row;
+    }
+
+    function addToggle(label, value, onChange) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin:6px 0;';
+      const lbl = document.createElement('span');
+      lbl.textContent = label;
+      lbl.style.cssText = 'color:#ccc;font-size:12px;';
+      row.appendChild(lbl);
+      const toggle = document.createElement('div');
+      toggle.style.cssText = `width:36px;height:20px;border-radius:10px;cursor:pointer;transition:background 0.2s;position:relative;background:${value ? '#4fc3f7' : '#666'};`;
+      const knob = document.createElement('div');
+      knob.style.cssText = `width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left 0.2s;left:${value ? '18px' : '2px'};`;
+      toggle.appendChild(knob);
+      toggle.addEventListener('click', () => { onChange(); });
+      row.appendChild(toggle);
+      // Update visual
+      row._updateToggle = (v) => {
+        toggle.style.background = v ? '#4fc3f7' : '#666';
+        knob.style.left = v ? '18px' : '2px';
+      };
+      return row;
+    }
+
+    // Fixation strength
+    const fixationRow = addRow('注视强度', [
+      ['0.5', '0.5x 弱'],
+      ['0.75', '0.75x'],
+      ['1', '1x 标准'],
+      ['1.25', '1.25x'],
+      ['1.5', '1.5x 强'],
+      ['2', '2x 极强'],
+    ], cfg.fixation, (v) => {
+      const c = getBionicConfig(); c.fixation = parseFloat(v); saveBionicConfig(c);
+      if (readActive.has('bionic')) { disableReadMode('bionic'); applyBionic(); rebuildReadStyle(); }
+    });
+    panel.appendChild(fixationRow);
+
+    // Saccades interval
+    const saccadesRow = addRow('跳词间隔', [
+      ['0', '0 全部加粗'],
+      ['1', '1 隔一个'],
+      ['2', '2 隔两个'],
+      ['3', '3 隔三个'],
+    ], cfg.saccades, (v) => {
+      const c = getBionicConfig(); c.saccades = parseInt(v); saveBionicConfig(c);
+      if (readActive.has('bionic')) { disableReadMode('bionic'); applyBionic(); rebuildReadStyle(); }
+    });
+    panel.appendChild(saccadesRow);
+
+    // Fade toggle
+    const fadeRow = addToggle('非加粗渐隐', cfg.fade, () => {
+      const c = getBionicConfig(); c.fade = !c.fade; saveBionicConfig(c);
+      fadeRow._updateToggle(c.fade);
+      if (readActive.has('bionic')) { disableReadMode('bionic'); applyBionic(); rebuildReadStyle(); }
+    });
+    panel.appendChild(fadeRow);
+
+    // Preview
+    const preview = document.createElement('div');
+    preview.style.cssText = 'margin-top:8px;padding:6px 8px;background:rgba(255,255,255,0.05);border-radius:6px;font-size:12px;line-height:1.6;color:#ddd;';
+    preview.innerHTML = `<div style="color:#888;font-size:10px;margin-bottom:4px;">预览效果</div>`;
+    const sampleText = 'The quick brown fox jumps over the lazy dog. 阅读辅助功能可以帮助你更专注地阅读网页内容。';
+    const sampleTokens = tokenize(sampleText);
+    let wIdx = 0;
+    preview.innerHTML += sampleTokens.map(t => {
+      const i = wIdx;
+      if (!/^\s+$/.test(t) && !/^[，。！？]/.test(t)) wIdx++;
+      return bionicTransform(t, i);
+    }).join('');
+    panel.appendChild(preview);
+
+    mountPoint().appendChild(panel);
+  }
+
   function openReadMenu() {
     if (readMenuOpen) return;
-    readMenuOpen = true; closeContentMenu();
+    readMenuOpen = true; bionicConfigOpen = false; closeContentMenu();
     const old = document.getElementById('__ca_read_menu__');
     if (old) old.remove();
     const menu = document.createElement('div');
@@ -740,19 +863,29 @@
       const item = document.createElement('div');
       const active = readActive.has(m.id);
       const row = document.createElement('div');
-      row.textContent = `${active ? '☑' : '☐'} ${m.icon} ${m.label}`;
-      Object.assign(row.style, {
-        padding: '8px 14px', cursor: 'pointer',
-        color: active ? '#4fc3f7' : '#fff',
-        fontSize: '13px', fontWeight: active ? 'bold' : 'normal',
-        transition: 'background 0.1s ease', borderRadius: '6px', margin: '0 4px',
-      });
+      row.style.cssText = `display:flex;align-items:center;padding:8px 14px;cursor:pointer;color:${active ? '#4fc3f7' : '#fff'};font-size:13px;font-weight:${active ? 'bold' : 'normal'};transition:background 0.1s ease;border-radius:6px;margin:0 4px;`;
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = `${active ? '☑' : '☐'} ${m.icon} ${m.label}`;
+      labelSpan.style.flex = '1';
+      row.appendChild(labelSpan);
+
+      // 仿生阅读设置按钮
+      if (m.id === 'bionic') {
+        const cfgBtn = document.createElement('span');
+        cfgBtn.textContent = '⚙';
+        cfgBtn.style.cssText = 'font-size:12px;opacity:0.5;padding:2px 6px;border-radius:4px;transition:all 0.15s;';
+        cfgBtn.addEventListener('mouseenter', (e) => { e.stopPropagation(); cfgBtn.style.opacity = '1'; cfgBtn.style.background = 'rgba(255,255,255,0.1)'; });
+        cfgBtn.addEventListener('mouseleave', (e) => { e.stopPropagation(); cfgBtn.style.opacity = '0.5'; cfgBtn.style.background = ''; });
+        cfgBtn.addEventListener('click', (e) => { e.stopPropagation(); openBionicConfig(row); });
+        row.appendChild(cfgBtn);
+      }
+
       const desc = document.createElement('div');
       desc.textContent = m.desc;
       Object.assign(desc.style, {
         padding: '0 14px 4px 14px', fontSize: '10px', color: '#888', lineHeight: '1.2',
       });
-      row.addEventListener('mouseenter', () => { row.style.background = 'rgba(255,255,255,0.1)'; });
+      row.addEventListener('mouseenter', () => { if (!active) row.style.background = 'rgba(255,255,255,0.1)'; });
       row.addEventListener('mouseleave', () => { row.style.background = ''; });
       row.addEventListener('click', (e) => { e.stopPropagation(); toggleReadMode(m.id); closeReadMenu(); openReadMenu(); });
       item.appendChild(row); item.appendChild(desc);
@@ -771,13 +904,18 @@
     }
   }
 
+  function closeBionicConfig() {
+    const p = document.getElementById('__ca_bionic_config__');
+    if (p) p.remove(); bionicConfigOpen = false;
+  }
+
   function closeAllOutside(e) {
-    const ids = ['__ca_content_menu__', '__ca_read_menu__', '__ca_content_btn__', '__ca_read_btn__'];
+    const ids = ['__ca_content_menu__', '__ca_read_menu__', '__ca_content_btn__', '__ca_read_btn__', '__ca_bionic_config__'];
     for (const id of ids) {
       const el = document.getElementById(id);
       if (el && el.contains(e.target)) return;
     }
-    closeContentMenu(); closeReadMenu();
+    closeContentMenu(); closeReadMenu(); closeBionicConfig();
   }
 
   function buildMenuItems(menu, modes, activeId, onSelect) {
