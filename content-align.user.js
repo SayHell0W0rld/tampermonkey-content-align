@@ -260,20 +260,17 @@
   function dimSiblings(block) {
     const parent = block.parentElement;
     if (!parent) return;
-    const hasCalm = readActive.has('calm-bg');
     for (const sib of parent.children) {
       if (sib === block) continue;
       const st = getComputedStyle(sib);
       if (st.position === 'fixed' || st.position === 'absolute' || st.display === 'none') continue;
       sib.setAttribute('data-ca-managed', '1');
-      sib.style.opacity = hasCalm ? '0.4' : '0.3';
-      sib.style.filter = hasCalm ? 'none' : 'blur(1px)';
-      sib.style.background = hasCalm ? 'rgba(0, 0, 0, 0.1)' : 'rgba(0, 0, 0, 0.5)';
+      sib.style.opacity = '0.15';
+      sib.style.filter = 'grayscale(80%) brightness(0.6)';
     }
   }
 
   function dimAncestorSiblings(block) {
-    const hasCalm = readActive.has('calm-bg');
     let ancestor = block.parentElement;
     while (ancestor && ancestor !== document.body) {
       for (const sib of ancestor.children) {
@@ -282,9 +279,8 @@
         if (st.position === 'fixed' || st.position === 'absolute' || st.display === 'none') continue;
         if (!sib.hasAttribute('data-ca-managed')) {
           sib.setAttribute('data-ca-managed', '1');
-          sib.style.opacity = hasCalm ? '0.4' : '0.3';
-          sib.style.filter = hasCalm ? 'none' : 'blur(1px)';
-          sib.style.background = hasCalm ? 'rgba(0, 0, 0, 0.1)' : 'rgba(0, 0, 0, 0.5)';
+          sib.style.opacity = '0.15';
+          sib.style.filter = 'grayscale(80%) brightness(0.6)';
         }
       }
       ancestor = ancestor.parentElement;
@@ -296,7 +292,7 @@
   // ============================================================
   function applyContentFocus() {
     ensureContentStyle();
-    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.15s ease-out, filter 0.15s ease-out !important; }`;
+    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, filter 0.3s ease-out !important; }`;
     let lastFocused = null;
     activeHandler = (e) => {
       const block = findContentBlockAtPoint(e.clientX, e.clientY);
@@ -312,7 +308,7 @@
   // ============================================================
   function applyContentTrack() {
     ensureContentStyle();
-    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, transform 0.3s ease-out, filter 0.2s ease-out !important; }`;
+    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, transform 0.3s ease-out, filter 0.3s ease-out !important; }`;
     let locked = false, currentCandidate = null, activeBlock = null;
     const clickBlocker = (e) => {
       let target = e.target;
@@ -691,10 +687,24 @@
     if (readActive.size === 0) {
       icon.textContent = '📖';
       tip.textContent = '阅读辅助';
+      icon.parentElement.style.background = 'rgba(0, 0, 0, 0.65)';
     } else {
-      const icons = [...readActive].map(m => READ_MAP[m]?.icon || '').join('');
-      icon.textContent = icons;
-      tip.textContent = `已开启: ${[...readActive].map(m => READ_MAP[m]?.label || m).join(' + ')}`;
+      icon.textContent = '📖';
+      // Show count badge via box-shadow trick
+      const count = readActive.size;
+      const labels = [...readActive].map(m => READ_MAP[m]?.label || m).join(' + ');
+      tip.textContent = `已开启 ${count} 项: ${labels}`;
+      icon.parentElement.style.background = 'rgba(79, 195, 247, 0.85)';
+      // Add count badge
+      let badge = icon.parentElement.querySelector('.__ca_badge__');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = '__ca_badge__';
+        badge.style.cssText = 'position:absolute;top:-4px;right:-4px;background:#ff5252;color:#fff;font-size:9px;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:bold;line-height:1;';
+        icon.parentElement.appendChild(badge);
+
+      }
+      badge.textContent = count;
     }
   }
 
@@ -830,6 +840,8 @@
     panel.appendChild(preview);
 
     mountPoint().appendChild(panel);
+    // Re-register outside click listener for the config panel
+    setTimeout(() => { document.addEventListener('click', closeAllOutside, { once: true, capture: true }); }, 10);
   }
 
   function openReadMenu() {
