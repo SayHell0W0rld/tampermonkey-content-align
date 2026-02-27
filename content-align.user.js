@@ -265,8 +265,8 @@
       const st = getComputedStyle(sib);
       if (st.position === 'fixed' || st.position === 'absolute' || st.display === 'none') continue;
       sib.setAttribute('data-ca-managed', '1');
-      sib.style.opacity = '0.15';
-      sib.style.filter = 'grayscale(80%) brightness(0.6)';
+      sib.style.filter = 'blur(12px) brightness(0.4) saturate(0.3)';
+      sib.style.opacity = '0.6';
     }
   }
 
@@ -279,8 +279,8 @@
         if (st.position === 'fixed' || st.position === 'absolute' || st.display === 'none') continue;
         if (!sib.hasAttribute('data-ca-managed')) {
           sib.setAttribute('data-ca-managed', '1');
-          sib.style.opacity = '0.15';
-          sib.style.filter = 'grayscale(80%) brightness(0.6)';
+          sib.style.filter = 'blur(12px) brightness(0.4) saturate(0.3)';
+          sib.style.opacity = '0.6';
         }
       }
       ancestor = ancestor.parentElement;
@@ -292,7 +292,7 @@
   // ============================================================
   function applyContentFocus() {
     ensureContentStyle();
-    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, filter 0.3s ease-out !important; }`;
+    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, filter 0.3s ease-out !important; position: relative !important; } [data-ca-managed]::after { content: ''; position: absolute; inset: 0; background: rgba(245, 240, 232, 0.45); pointer-events: none; border-radius: inherit; }`;
     let lastFocused = null;
     activeHandler = (e) => {
       const block = findContentBlockAtPoint(e.clientX, e.clientY);
@@ -308,7 +308,7 @@
   // ============================================================
   function applyContentTrack() {
     ensureContentStyle();
-    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, transform 0.3s ease-out, filter 0.3s ease-out !important; }`;
+    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, transform 0.3s ease-out, filter 0.3s ease-out !important; position: relative !important; } [data-ca-managed]::after { content: ''; position: absolute; inset: 0; background: rgba(245, 240, 232, 0.45); pointer-events: none; border-radius: inherit; }`;
     let locked = false, currentCandidate = null, activeBlock = null;
     const clickBlocker = (e) => {
       let target = e.target;
