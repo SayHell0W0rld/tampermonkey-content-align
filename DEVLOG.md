@@ -102,7 +102,11 @@
 ### 9. 磨砂玻璃替代灰黑蒙版
 **决策**: blur(12px) + brightness + saturate + ::after 半透明遮罩
 **原因**: 旧方案的 rgba(0,0,0,0.5) 蒙版太丑，磨砂玻璃既遮挡内容又保留轮廓感
-**注意**: 不能用 ::after 伪元素加半透明遮罩——`[data-ca-managed]` 同时作用于虚化元素和聚焦活动区块，::after 会在活动区块上也加白色蒙版
+**注意**: 不能用 ::after 伪元素加半透明遮罩
+
+#### 12. 配置面板 capture 阶段竞态
+**问题**: closeAllOutside 用 capture:true 在捕获阶段先于 ⚙️ click 执行，把 read menu 关掉
+**修复**: closeAllOutside 开头检查 e.target.textContent === '⚙' 则跳过
 
 ### 10. mousemove 节流
 **决策**: 30ms throttle（~33fps）

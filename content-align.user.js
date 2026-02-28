@@ -806,13 +806,11 @@
     }
 
     // Fixation strength
-    const fixationRow = addRow('注视强度', [
-      ['0.5', '0.5x 弱'],
-      ['0.75', '0.75x'],
-      ['1', '1x 标准'],
-      ['1.25', '1.25x'],
-      ['1.5', '1.5x 强'],
-      ['2', '2x 极强'],
+    const fixationRow = addRow('加粗比例', [
+      ['0.3', '30% 弱'],
+      ['0.5', '50% 标准'],
+      ['0.7', '70% 强'],
+      ['1', '100% 全加粗'],
     ], cfg.fixation, (v) => {
       const c = getBionicConfig(); c.fixation = parseFloat(v); saveBionicConfig(c);
       if (readActive.has('bionic')) { disableReadMode('bionic'); applyBionic(); rebuildReadStyle(); }
@@ -821,10 +819,10 @@
 
     // Saccades interval
     const saccadesRow = addRow('跳词间隔', [
-      ['0', '0 全部加粗'],
-      ['1', '1 隔一个'],
-      ['2', '2 隔两个'],
-      ['3', '3 隔三个'],
+      ['0', '0 不跳'],
+      ['1', '1 隔1个'],
+      ['2', '2 隔2个'],
+      ['3', '3 隔3个'],
     ], cfg.saccades, (v) => {
       const c = getBionicConfig(); c.saccades = parseInt(v); saveBionicConfig(c);
       if (readActive.has('bionic')) { disableReadMode('bionic'); applyBionic(); rebuildReadStyle(); }
@@ -843,7 +841,7 @@
     const preview = document.createElement('div');
     preview.style.cssText = 'margin-top:8px;padding:6px 8px;background:rgba(255,255,255,0.05);border-radius:6px;font-size:12px;line-height:1.6;color:#ddd;';
     preview.innerHTML = `<div style="color:#888;font-size:10px;margin-bottom:4px;">预览效果</div>`;
-    const sampleText = 'The quick brown fox jumps over the lazy dog. 阅读辅助功能可以帮助你更专注地阅读网页内容。';
+    const sampleText = 'The quick brown fox jumps over the lazy dog. 人工智能技术正在改变我们的生活方式和工作方式。';
     const sampleTokens = tokenize(sampleText);
     let wIdx = 0;
     preview.innerHTML += sampleTokens.map(t => {
