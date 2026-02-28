@@ -936,6 +936,8 @@
   }
 
   function closeAllOutside(e) {
+    // ⚙ 配置按钮在 read menu 内，capture 阶段会先把 read menu 关掉导致配置面板打不开
+    if (e.target.textContent === '⚙') return;
     const ids = ['__ca_content_menu__', '__ca_read_menu__', '__ca_content_btn__', '__ca_read_btn__', '__ca_bionic_config__'];
     for (const id of ids) {
       const el = document.getElementById(id);
