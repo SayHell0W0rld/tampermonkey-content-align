@@ -409,41 +409,44 @@
            (code >= 0x3000 && code <= 0x303F) || (code >= 0xFF00 && code <= 0xFFEF);
   }
 
-  // 智能分词：英文按空格，中文按标点和语义边界
+  // 中文虚词切分词表：在这些字符后断句，将长句拆成更小语义单元
+  const CJK_SPLIT_CHARS = new Set([
+    '的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一',
+    '上', '也', '很', '到', '说', '要', '去', '你', '会', '着', '看', '好',
+    '这', '他', '她', '它', '们', '那', '被', '从', '把', '让', '用', '为',
+    '以', '所', '能', '可', '而', '但', '如果', '因为', '所以', '虽然',
+    '不过', '然后', '或者', '以及', '还是', '只是', '什么', '怎么',
+    '与', '及', '或', '且', '之', '其', '此', '于', '则', '乃', '即',
+    '过', '地', '得', '吗', '呢', '吧', '啊', '哦', '哈', '呀', '嘛', '啦', '嗯',
+  ]);
+
+  // 智能分词：英文按空格，中文按标点、虚词和语义边界
   function tokenize(text) {
     const tokens = [];
     let current = '';
     let lastWasCJK = null;
 
-    for (const ch of text) {
+    function flush() { if (current) { tokens.push(current); current = ''; } }
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
       const nowCJK = isCJK(ch);
       const isSpace = /\s/.test(ch);
-      const isPunctuation = /[，。！？、；：""''（）【】《》…—\-,.!?;:'"()\[\]<>]/.test(ch);
+      const isPunctuation = /[，。！？、；：\"‘’“”（）【】《》…—\-,.!?;:'"()\[\]<>]/.test(ch);
 
-      if (isSpace) {
-        if (current) { tokens.push(current); current = ''; }
-        tokens.push(ch);
-        lastWasCJK = null;
-        continue;
-      }
+      if (isSpace) { flush(); tokens.push(ch); lastWasCJK = null; continue; }
+      if (isPunctuation) { flush(); tokens.push(ch); lastWasCJK = null; continue; }
 
-      if (isPunctuation) {
-        if (current) { tokens.push(current); current = ''; }
-        tokens.push(ch);
-        lastWasCJK = null;
-        continue;
-      }
+      if (lastWasCJK !== null && nowCJK !== lastWasCJK && current) { flush(); }
 
-      // 中英文切换时切分
-      if (lastWasCJK !== null && nowCJK !== lastWasCJK && current) {
-        tokens.push(current);
-        current = '';
+      if (nowCJK && CJK_SPLIT_CHARS.has(ch) && current && current.length >= 1) {
+        current += ch; flush(); lastWasCJK = nowCJK; continue;
       }
 
       current += ch;
       lastWasCJK = nowCJK;
     }
-    if (current) tokens.push(current);
+    flush();
     return tokens;
   }
 
@@ -461,9 +464,7 @@
     const f = cfg.fixation; // fixation multiplier
     let boldLen;
     if (isCJK(word[0])) {
-      // Chinese: always bold first char only (research-backed: fixations land at word beginning)
-      // Use heavier weight via <b> with font-weight 900 for better visibility on complex glyphs
-      boldLen = 1;
+      boldLen = len <= 2 ? 1 : Math.min(Math.ceil(len * 0.5), Math.ceil(len * 0.5 * f));
     } else {
       if (len <= 1) boldLen = 0;
       else if (len <= 3) boldLen = 1;
