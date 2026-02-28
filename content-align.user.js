@@ -702,6 +702,8 @@
       icon.textContent = '📖';
       tip.textContent = '阅读辅助';
       icon.parentElement.style.background = 'rgba(0, 0, 0, 0.65)';
+      const oldBadge = icon.parentElement.querySelector('.__ca_badge__');
+      if (oldBadge) oldBadge.remove();
     } else {
       icon.textContent = '📖';
       // Show count badge via box-shadow trick
