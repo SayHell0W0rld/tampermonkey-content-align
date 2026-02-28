@@ -747,115 +747,115 @@
 
   let bionicConfigOpen = false;
 
-  function openBionicConfig(anchorEl) {
+  function openBionicConfig() {
     const old = document.getElementById('__ca_bionic_config__');
     if (old) { old.remove(); bionicConfigOpen = false; return; }
     bionicConfigOpen = true;
-    const cfg = getBionicConfig();
+    const savedCfg = getBionicConfig();
+    // Working copy — only saved on Apply
+    const cfg = { ...savedCfg };
 
-    const panel = document.createElement('div');
-    panel.id = '__ca_bionic_config__';
+    const panel = document.createElement('div'); panel.id = '__ca_bionic_config__';
     Object.assign(panel.style, {
       position: 'fixed', bottom: '140px', right: '26px',
       background: 'rgba(30, 30, 30, 0.97)', borderRadius: '10px',
-      padding: '12px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
-      zIndex: '2147483647', minWidth: '220px',
+      padding: '10px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
+      zIndex: '2147483647', width: '200px',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     });
 
-    function addRow(label, options, value, onChange) {
+    // Title bar
+    const title = document.createElement('div');
+    title.textContent = '⚙ 仿生阅读设置';
+    title.style.cssText = 'color:#4fc3f7;font-size:12px;font-weight:bold;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.1);';
+    panel.appendChild(title);
+
+    function addRow(label, options, value) {
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin:6px 0;';
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin:5px 0;';
       const lbl = document.createElement('span');
       lbl.textContent = label;
-      lbl.style.cssText = 'color:#ccc;font-size:12px;';
+      lbl.style.cssText = 'color:#ccc;font-size:11px;';
       row.appendChild(lbl);
       const sel = document.createElement('select');
-      sel.style.cssText = 'background:#444;color:#fff;border:1px solid #666;border-radius:4px;padding:2px 4px;font-size:11px;cursor:pointer;';
+      sel.style.cssText = 'background:#444;color:#fff;border:1px solid #666;border-radius:4px;padding:2px 4px;font-size:11px;cursor:pointer;width:90px;';
       for (const [val, text] of options) {
         const opt = document.createElement('option');
         opt.value = val; opt.textContent = text;
         if (val == value) opt.selected = true;
         sel.appendChild(opt);
       }
-      sel.addEventListener('change', () => { onChange(sel.value); });
       row.appendChild(sel);
-      return row;
+      return { row, sel };
     }
 
-    function addToggle(label, value, onChange) {
+    function addToggle(label, value) {
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin:6px 0;';
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin:5px 0;';
       const lbl = document.createElement('span');
       lbl.textContent = label;
-      lbl.style.cssText = 'color:#ccc;font-size:12px;';
+      lbl.style.cssText = 'color:#ccc;font-size:11px;';
       row.appendChild(lbl);
       const toggle = document.createElement('div');
-      toggle.style.cssText = `width:36px;height:20px;border-radius:10px;cursor:pointer;transition:background 0.2s;position:relative;background:${value ? '#4fc3f7' : '#666'};`;
+      toggle.style.cssText = `width:32px;height:18px;border-radius:9px;cursor:pointer;transition:background 0.2s;position:relative;background:${value ? '#4fc3f7' : '#666'};`;
       const knob = document.createElement('div');
-      knob.style.cssText = `width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left 0.2s;left:${value ? '18px' : '2px'};`;
+      knob.style.cssText = `width:14px;height:14px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left 0.2s;left:${value ? '16px' : '2px'};`;
       toggle.appendChild(knob);
-      toggle.addEventListener('click', () => { onChange(); });
       row.appendChild(toggle);
-      // Update visual
-      row._updateToggle = (v) => {
-        toggle.style.background = v ? '#4fc3f7' : '#666';
-        knob.style.left = v ? '18px' : '2px';
-      };
-      return row;
+      return { row, toggle, knob, update: (v) => { toggle.style.background = v ? '#4fc3f7' : '#666'; knob.style.left = v ? '16px' : '2px'; } };
     }
 
-    // Fixation strength
-    const fixationRow = addRow('加粗比例', [
-      ['0.3', '30% 弱'],
-      ['0.5', '50% 标准'],
-      ['0.7', '70% 强'],
-      ['1', '100% 全加粗'],
-    ], cfg.fixation, (v) => {
-      const c = getBionicConfig(); c.fixation = parseFloat(v); saveBionicConfig(c);
-      if (readActive.has('bionic')) { disableReadMode('bionic'); applyBionic(); rebuildReadStyle(); }
-    });
-    panel.appendChild(fixationRow);
+    // Fixation
+    const fixation = addRow('加粗比例', [
+      ['0.3', '30%'], ['0.5', '50%'], ['0.7', '70%'], ['1', '100%'],
+    ], cfg.fixation);
+    fixation.sel.addEventListener('change', () => { cfg.fixation = parseFloat(fixation.sel.value); });
+    panel.appendChild(fixation.row);
 
-    // Saccades interval
-    const saccadesRow = addRow('跳词间隔', [
-      ['0', '0 不跳'],
-      ['1', '1 隔1个'],
-      ['2', '2 隔2个'],
-      ['3', '3 隔3个'],
-    ], cfg.saccades, (v) => {
-      const c = getBionicConfig(); c.saccades = parseInt(v); saveBionicConfig(c);
-      if (readActive.has('bionic')) { disableReadMode('bionic'); applyBionic(); rebuildReadStyle(); }
-    });
-    panel.appendChild(saccadesRow);
+    // Saccades
+    const saccades = addRow('跳词间隔', [
+      ['0', '不跳'], ['1', '隔1'], ['2', '隔2'], ['3', '隔3'],
+    ], cfg.saccades);
+    saccades.sel.addEventListener('change', () => { cfg.saccades = parseInt(saccades.sel.value); });
+    panel.appendChild(saccades.row);
 
-    // Fade toggle
-    const fadeRow = addToggle('非加粗渐隐', cfg.fade, () => {
-      const c = getBionicConfig(); c.fade = !c.fade; saveBionicConfig(c);
-      fadeRow._updateToggle(c.fade);
-      if (readActive.has('bionic')) { disableReadMode('bionic'); applyBionic(); rebuildReadStyle(); }
-    });
-    panel.appendChild(fadeRow);
+    // Fade
+    const fade = addToggle('非加粗渐隐', cfg.fade);
+    fade.toggle.addEventListener('click', () => { cfg.fade = !cfg.fade; fade.update(cfg.fade); });
+    panel.appendChild(fade.row);
 
-    // Preview
-    const preview = document.createElement('div');
-    preview.style.cssText = 'margin-top:8px;padding:6px 8px;background:rgba(255,255,255,0.05);border-radius:6px;font-size:12px;line-height:1.6;color:#ddd;';
-    preview.innerHTML = `<div style="color:#888;font-size:10px;margin-bottom:4px;">预览效果</div>`;
-    const sampleText = 'The quick brown fox jumps over the lazy dog. 人工智能技术正在改变我们的生活方式和工作方式。';
-    const sampleTokens = tokenize(sampleText);
-    let wIdx = 0;
-    preview.innerHTML += sampleTokens.map(t => {
-      const i = wIdx;
-      if (!/^\s+$/.test(t) && !/^[，。！？]/.test(t)) wIdx++;
-      return bionicTransform(t, i);
-    }).join('');
-    panel.appendChild(preview);
+    // Apply + Cancel buttons
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.1);';
+
+    const applyBtn = document.createElement('button');
+    applyBtn.textContent = '✓ 应用';
+    applyBtn.style.cssText = 'flex:1;padding:5px 0;border:none;border-radius:5px;background:#4fc3f7;color:#fff;font-size:11px;font-weight:bold;cursor:pointer;transition:background 0.15s;';
+    applyBtn.addEventListener('mouseenter', () => { applyBtn.style.background = '#39b0e7'; });
+    applyBtn.addEventListener('mouseleave', () => { applyBtn.style.background = '#4fc3f7'; });
+    applyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      saveBionicConfig(cfg);
+      if (readActive.has('bionic')) { disableReadMode('bionic'); applyBionic(); rebuildReadStyle(); }
+      panel.remove(); bionicConfigOpen = false;
+    });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = '✕ 取消';
+    cancelBtn.style.cssText = 'flex:1;padding:5px 0;border:none;border-radius:5px;background:#555;color:#ccc;font-size:11px;cursor:pointer;transition:background 0.15s;';
+    cancelBtn.addEventListener('mouseenter', () => { cancelBtn.style.background = '#666'; });
+    cancelBtn.addEventListener('mouseleave', () => { cancelBtn.style.background = '#555'; });
+    cancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      panel.remove(); bionicConfigOpen = false;
+    });
+
+    btnRow.appendChild(applyBtn);
+    btnRow.appendChild(cancelBtn);
+    panel.appendChild(btnRow);
 
     mountPoint().appendChild(panel);
-    // Re-register outside click listener for the config panel
-    setTimeout(() => { document.addEventListener('click', closeAllOutside, { once: true, capture: true }); }, 10);
   }
-
   function openReadMenu() {
     if (readMenuOpen) return;
     readMenuOpen = true; bionicConfigOpen = false; closeContentMenu();
@@ -934,8 +934,6 @@
   }
 
   function closeAllOutside(e) {
-    // ⚙ 配置按钮在 read menu 内，capture 阶段会先把 read menu 关掉导致配置面板打不开
-    if (e.target.textContent === '⚙') return;
     const ids = ['__ca_content_menu__', '__ca_read_menu__', '__ca_content_btn__', '__ca_read_btn__', '__ca_bionic_config__'];
     for (const id of ids) {
       const el = document.getElementById(id);
