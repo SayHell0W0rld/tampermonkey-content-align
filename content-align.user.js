@@ -615,7 +615,7 @@
     const m = CONTENT_MAP[contentMode] || CONTENT_MAP.original;
     btn.innerHTML = `<span id="__ca_content_icon__">${m.icon}</span>`;
     Object.assign(btn.style, {
-      position: 'fixed', bottom: '20px', right: '36px',
+      position: 'fixed', bottom: '20px', right: '0',
       width: '40px', height: '40px', borderRadius: '50%',
       background: 'rgba(0, 0, 0, 0.75)', color: '#fff', fontSize: '16px',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -638,7 +638,7 @@
     readBtn.id = '__ca_read_btn__';
     readBtn.innerHTML = `<span id="__ca_read_icon__">📖</span>`;
     Object.assign(readBtn.style, {
-      position: 'fixed', bottom: '62px', right: '36px',
+      position: 'fixed', bottom: '62px', right: '0',
       width: '32px', height: '32px', borderRadius: '50%',
       background: 'rgba(0, 0, 0, 0.65)', color: '#fff', fontSize: '13px',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -730,7 +730,7 @@
     const menu = document.createElement('div');
     menu.id = '__ca_content_menu__';
     Object.assign(menu.style, {
-      position: 'fixed', bottom: '70px', right: '26px',
+      position: 'fixed', bottom: '70px', right: '0',
       background: 'rgba(20, 20, 20, 0.95)', borderRadius: '10px',
       padding: '6px 0', boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
       zIndex: '2147483647', minWidth: '180px',
@@ -757,7 +757,7 @@
 
     const panel = document.createElement('div'); panel.id = '__ca_bionic_config__';
     Object.assign(panel.style, {
-      position: 'fixed', bottom: '140px', right: '26px',
+      position: 'fixed', bottom: '140px', right: '0',
       background: 'rgba(30, 30, 30, 0.97)', borderRadius: '10px',
       padding: '10px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
       zIndex: '2147483647', width: '200px',
@@ -864,7 +864,7 @@
     const menu = document.createElement('div');
     menu.id = '__ca_read_menu__';
     Object.assign(menu.style, {
-      position: 'fixed', bottom: '100px', right: '26px',
+      position: 'fixed', bottom: '100px', right: '0',
       background: 'rgba(20, 20, 20, 0.95)', borderRadius: '10px',
       padding: '6px 0', boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
       zIndex: '2147483647', minWidth: '200px',
