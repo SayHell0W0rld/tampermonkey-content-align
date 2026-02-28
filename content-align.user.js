@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         网页内容对齐助手
 // @namespace    https://github.com/eli
-// @version      14.3.0
-// @description  网页内容对齐 + 阅读辅助（仿生阅读、阅读尺、段落色彩交替等）
+// @version      15.0.0
+// @description  网页内容对齐 + 阅读辅助（中英文仿生阅读、阅读尺、段落彩条等）
 // @author       eli
 // @license      MIT
 // @homepage     https://github.com/eli/content-align
@@ -55,6 +55,15 @@
   let readActive = new Set();
   let readHandlers = [];
   let rulerEl = null;
+
+  // 节流：避免 mousemove 高频触发导致闪烁和性能问题
+  function throttle(fn, ms) {
+    let last = 0;
+    return function(...args) {
+      const now = Date.now();
+      if (now - last >= ms) { last = now; fn.apply(this, args); }
+    };
+  }
 
   // ============================================================
   // 存储
@@ -184,7 +193,7 @@
     let css = '';
 
     if (readActive.has('bionic')) {
-      css += `[data-ca-bionic] { font-weight: inherit !important; } [data-ca-bionic] b { font-weight: 800 !important; } [data-ca-bionic] i { font-style: normal !important; opacity: 0.75 !important; }`;
+      css += `[data-ca-bionic] { font-weight: inherit !important; } [data-ca-bionic] b { font-weight: 900 !important; } [data-ca-bionic] i { font-style: normal !important; opacity: 0.75 !important; }`;
     }
     if (readActive.has('zebra')) {
       css += `[data-ca-zebra] { transition: opacity 0.15s ease-out, background 0.15s ease-out !important; }`;
@@ -292,14 +301,15 @@
   // ============================================================
   function applyContentFocus() {
     ensureContentStyle();
-    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, filter 0.3s ease-out !important; position: relative !important; } [data-ca-managed]::after { content: ''; position: absolute; inset: 0; background: rgba(245, 240, 232, 0.45); pointer-events: none; border-radius: inherit; }`;
+    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, filter 0.3s ease-out !important; }`;
     let lastFocused = null;
-    activeHandler = (e) => {
+    const handler = (e) => {
       const block = findContentBlockAtPoint(e.clientX, e.clientY);
       if (!block || block === lastFocused) return;
       clearManaged(); lastFocused = block;
       dimSiblings(block); dimAncestorSiblings(block);
     };
+    activeHandler = throttle(handler, 30);
     document.addEventListener('mousemove', activeHandler, { passive: true });
   }
 
@@ -308,7 +318,7 @@
   // ============================================================
   function applyContentTrack() {
     ensureContentStyle();
-    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, transform 0.3s ease-out, filter 0.3s ease-out !important; position: relative !important; } [data-ca-managed]::after { content: ''; position: absolute; inset: 0; background: rgba(245, 240, 232, 0.45); pointer-events: none; border-radius: inherit; }`;
+    contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, transform 0.3s ease-out, filter 0.3s ease-out !important; }`;
     let locked = false, currentCandidate = null, activeBlock = null;
     const clickBlocker = (e) => {
       let target = e.target;
@@ -321,7 +331,7 @@
       }
     };
     document.addEventListener('click', clickBlocker, { capture: true, passive: false });
-    activeHandler = (e) => {
+    const handler = (e) => {
       if (locked) return;
       const block = findContentBlockAtPoint(e.clientX, e.clientY);
       if (!block || !isSignificantBlock(block)) {
@@ -363,6 +373,7 @@
         el.removeAttribute('data-ca-managed');
       });
     };
+    activeHandler = throttle(handler, 30);
     document.addEventListener('mousemove', activeHandler, { passive: true });
     document.addEventListener('dblclick', activeUnlock, { passive: true });
     activeHandler._clickBlocker = clickBlocker;
@@ -450,7 +461,9 @@
     const f = cfg.fixation; // fixation multiplier
     let boldLen;
     if (isCJK(word[0])) {
-      boldLen = len <= 2 ? 1 : Math.min(2, Math.ceil(len * 0.3 * f));
+      // Chinese: always bold first char only (research-backed: fixations land at word beginning)
+      // Use heavier weight via <b> with font-weight 900 for better visibility on complex glyphs
+      boldLen = 1;
     } else {
       if (len <= 1) boldLen = 0;
       else if (len <= 3) boldLen = 1;
