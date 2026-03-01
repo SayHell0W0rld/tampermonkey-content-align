@@ -1,11 +1,11 @@
 // ==UserScript==
-// @name         网页内容对齐助手
-// @namespace    https://github.com/eli
-// @version      15.0.0
-// @description  网页内容对齐 + 阅读辅助（中英文仿生阅读、阅读尺、段落彩条等）
-// @author       eli
+// @name         网页内容对齐 + 阅读辅助
+// @namespace    https://github.com/SayHell0W0rld
+// @version      15.3.0
+// @description  免受互联网时代的信息洪流干扰，聚精会神干好面前的每一件小事情：网页内容居中对齐（自动聚焦） + 阅读辅助（中英文仿生阅读、阅读尺、段落彩条等）
+// @author       SayHell0W0rld
 // @license      MIT
-// @homepage     https://github.com/eli/content-align
+// @homepage     https://github.com/SayHell0W0rld/tampermonkey-content-align
 // @match        *://*/*
 // @exclude      *://*.youtube.com/*
 // @exclude      *://*.netflix.com/*
@@ -26,9 +26,8 @@
   const CONTENT_MODES = [
     { id: 'original',   icon: '⬜', label: '原始',   desc: '恢复默认' },
     { id: 'center',     icon: '⬛', label: '居中',   desc: '内容居中显示' },
-    { id: 'shift-right',icon: '▶',  label: '右移',   desc: '整体向右平移' },
     { id: 'focus',      icon: '◎',  label: '聚焦',   desc: '鼠标所在内容区不变，其余虚化' },
-    { id: 'mouse-track',icon: '⊙',  label: '跟踪',   desc: '聚焦+居中锁定（300ms触发，双击解锁）' },
+    { id: 'mouse-track',icon: '⊙',  label: '跟踪',   desc: '悬停预览，点击锁定，双击解锁' },
   ];
   const CONTENT_MAP = Object.fromEntries(CONTENT_MODES.map(m => [m.id, m]));
 
@@ -112,6 +111,7 @@
       document.removeEventListener('mousemove', activeHandler, { passive: true });
       document.removeEventListener('mouseover', activeHandler, { passive: true });
       if (activeHandler._clickBlocker) document.removeEventListener('click', activeHandler._clickBlocker, { capture: true });
+      if (activeHandler._clickToLock) document.removeEventListener('click', activeHandler._clickToLock, { passive: true });
       activeHandler = null;
     }
     if (activeUnlock) { document.removeEventListener('dblclick', activeUnlock, { passive: true }); activeUnlock = null; }
@@ -314,12 +314,41 @@
   }
 
   // ============================================================
-  // 内容对齐：跟踪
+  // 内容对齐：跟踪（悬停预览 + 点击锁定）
   // ============================================================
   function applyContentTrack() {
     ensureContentStyle();
     contentStyleEl.textContent = `[data-ca-managed] { transition: opacity 0.2s ease-out, transform 0.3s ease-out, filter 0.3s ease-out !important; }`;
     let locked = false, currentCandidate = null, activeBlock = null;
+
+    // 点击锁定 handler：点击当前预览的区块进行锁定
+    const clickToLock = (e) => {
+      if (locked) return;
+      // 忽略按钮/菜单的点击
+      const ids = ['__ca_content_btn__', '__ca_read_btn__', '__ca_content_menu__', '__ca_read_menu__', '__ca_bionic_config__'];
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.contains(e.target)) return;
+      }
+      if (!currentCandidate) return;
+      // 阻止链接跳转等默认行为
+      e.preventDefault();
+      e.stopPropagation();
+      // 锁定当前预览区块
+      locked = true;
+      activeBlock = currentCandidate;
+      currentCandidate.style.outline = '';
+      currentCandidate.style.outlineOffset = '';
+      const rect = currentCandidate.getBoundingClientRect();
+      const shift = (window.innerWidth - rect.width) / 2 - rect.left;
+      currentCandidate.style.transform = `translateX(${shift}px)`;
+      currentCandidate.style.boxShadow = '0 0 40px rgba(0,0,0,0.3)';
+      currentCandidate.style.borderRadius = '8px';
+      currentCandidate.style.position = 'relative';
+      currentCandidate.style.zIndex = '10';
+    };
+
+    // 点击阻止器：阻止对虚化区域的点击
     const clickBlocker = (e) => {
       let target = e.target;
       while (target && target !== document.body) {
@@ -330,53 +359,63 @@
         target = target.parentElement;
       }
     };
+    document.addEventListener('click', clickToLock, { capture: true, passive: false });
     document.addEventListener('click', clickBlocker, { capture: true, passive: false });
+
+    // 悬停预览 handler
     const handler = (e) => {
       if (locked) return;
       const block = findContentBlockAtPoint(e.clientX, e.clientY);
       if (!block || !isSignificantBlock(block)) {
         if (lockTimer) { clearTimeout(lockTimer); lockTimer = null; }
-        currentCandidate = null; return;
+        currentCandidate = null;
+        clearManaged();
+        return;
       }
       if (block === currentCandidate) return;
       currentCandidate = block;
       if (lockTimer) { clearTimeout(lockTimer); lockTimer = null; }
-      clearManaged(); dimSiblings(block); dimAncestorSiblings(block);
+      clearManaged();
+      dimSiblings(block);
+      dimAncestorSiblings(block);
       block.setAttribute('data-ca-managed', '1');
       block.style.outline = '3px solid rgba(79, 195, 247, 0.9)';
       block.style.outlineOffset = '4px';
       block.style.borderRadius = '8px';
-      lockTimer = setTimeout(() => {
-        if (locked || currentCandidate !== block) return;
-        locked = true; lockTimer = null; activeBlock = block;
-        block.style.outline = ''; block.style.outlineOffset = '';
-        const rect = block.getBoundingClientRect();
-        const shift = (window.innerWidth - rect.width) / 2 - rect.left;
-        block.style.transform = `translateX(${shift}px)`;
-        block.style.boxShadow = '0 0 40px rgba(0,0,0,0.3)';
-        block.style.borderRadius = '8px';
-        block.style.position = 'relative'; block.style.zIndex = '10';
-      }, LOCK_DELAY);
     };
+
     activeUnlock = () => {
       if (!locked) {
         if (lockTimer) { clearTimeout(lockTimer); lockTimer = null; }
-        currentCandidate = null; clearManaged(); return;
+        currentCandidate = null;
+        clearManaged();
+        return;
       }
-      locked = false; currentCandidate = null; activeBlock = null;
+      locked = false;
+      currentCandidate = null;
+      activeBlock = null;
       document.querySelectorAll('[data-ca-managed]').forEach((el) => {
         el.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-        el.style.transform = ''; el.style.opacity = ''; el.style.zIndex = '';
-        el.style.filter = ''; el.style.background = '';
-        el.style.boxShadow = ''; el.style.borderRadius = '';
+        el.style.transform = '';
+        el.style.opacity = '';
+        el.style.zIndex = '';
+        el.style.filter = '';
+        el.style.background = '';
+        el.style.boxShadow = '';
+        el.style.borderRadius = '';
         el.style.position = '';
+        el.style.outline = '';
+        el.style.outlineOffset = '';
         el.removeAttribute('data-ca-managed');
       });
     };
+
     activeHandler = throttle(handler, 30);
     document.addEventListener('mousemove', activeHandler, { passive: true });
+    document.addEventListener('click', clickToLock, { passive: true });
     document.addEventListener('dblclick', activeUnlock, { passive: true });
     activeHandler._clickBlocker = clickBlocker;
+    activeHandler._clickToLock = clickToLock;
   }
 
   function applyContentMode(mode) {
@@ -385,8 +424,6 @@
     ensureContentStyle();
     if (mode === 'center') {
       contentStyleEl.textContent = `body { max-width: 90vw !important; margin-left: auto !important; margin-right: auto !important; transition: all 0.3s ease !important; }`;
-    } else if (mode === 'shift-right') {
-      contentStyleEl.textContent = `html { overflow-x: hidden !important; } body { transform: translateX(15vw) !important; transform-origin: top left !important; transition: transform 0.3s ease !important; }`;
     } else if (mode === 'focus') {
       applyContentFocus();
     } else if (mode === 'mouse-track') {
@@ -613,18 +650,19 @@
     const btn = document.createElement('div');
     btn.id = '__ca_content_btn__';
     const m = CONTENT_MAP[contentMode] || CONTENT_MAP.original;
-    btn.innerHTML = `<span id="__ca_content_icon__">${m.icon}</span>`;
+    btn.innerHTML = '<span id="__ca_content_icon__">' + m.icon + '</span>';
     Object.assign(btn.style, {
-      position: 'fixed', bottom: '20px', right: '0',
+      position: 'fixed', bottom: '20px', right: '-20px',
       width: '40px', height: '40px', borderRadius: '50%',
       background: 'rgba(0, 0, 0, 0.75)', color: '#fff', fontSize: '16px',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       cursor: 'pointer', zIndex: '2147483647', userSelect: 'none',
-      boxShadow: '0 2px 10px rgba(0,0,0,0.4)', transition: 'all 0.2s ease', opacity: '0.8',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
+      transition: 'right 0.3s ease, opacity 0.3s ease', opacity: '0.8',
     });
     const tip = document.createElement('div');
     tip.id = '__ca_content_tip__';
-    tip.textContent = `${m.label}（内容对齐）`;
+    tip.textContent = m.label + '（内容对齐） Alt+1~4';
     Object.assign(tip.style, {
       position: 'absolute', bottom: '100%', right: '0', marginBottom: '8px',
       padding: '4px 8px', borderRadius: '4px', background: 'rgba(0, 0, 0, 0.85)',
@@ -636,14 +674,15 @@
     // 阅读辅助入口
     const readBtn = document.createElement('div');
     readBtn.id = '__ca_read_btn__';
-    readBtn.innerHTML = `<span id="__ca_read_icon__">📖</span>`;
+    readBtn.innerHTML = '<span id="__ca_read_icon__">\ud83d\udcd6</span>';
     Object.assign(readBtn.style, {
-      position: 'fixed', bottom: '62px', right: '0',
+      position: 'fixed', bottom: '62px', right: '-16px',
       width: '32px', height: '32px', borderRadius: '50%',
       background: 'rgba(0, 0, 0, 0.65)', color: '#fff', fontSize: '13px',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       cursor: 'pointer', zIndex: '2147483647', userSelect: 'none',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.3)', transition: 'all 0.2s ease',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+      transition: 'right 0.3s ease, opacity 0.3s ease',
       opacity: '0', pointerEvents: 'none',
     });
     const readTip = document.createElement('div');
@@ -658,33 +697,90 @@
     readBtn.appendChild(readTip);
 
     let hideTimer = null;
+    let autoHideTimer = null;
+
+    // 自动隐藏：5秒后隐藏到右侧边栏
+    const startAutoHide = () => {
+      if (autoHideTimer) clearTimeout(autoHideTimer);
+      autoHideTimer = setTimeout(() => {
+        if (!contentMenuOpen && !readMenuOpen) {
+          btn.style.right = '-20px';
+          if (readActive.size === 0) {
+            readBtn.style.right = '-16px';
+          }
+        }
+      }, 5000);
+    };
+
     btn.addEventListener('mouseenter', () => {
-      btn.style.opacity = '1'; tip.style.opacity = '1';
+      btn.style.right = '0';
+      btn.style.opacity = '1';
+      tip.style.opacity = '1';
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-      readBtn.style.opacity = '0.8'; readBtn.style.pointerEvents = 'auto';
+      if (autoHideTimer) { clearTimeout(autoHideTimer); autoHideTimer = null; }
+      readBtn.style.opacity = '0.8';
+      readBtn.style.pointerEvents = 'auto';
+      readBtn.style.right = '0';
     });
     btn.addEventListener('mouseleave', () => {
-      btn.style.opacity = '0.8'; tip.style.opacity = '0';
+      btn.style.opacity = '0.8';
+      tip.style.opacity = '0';
       hideTimer = setTimeout(() => {
-        if (!readMenuOpen) { readBtn.style.opacity = '0'; readBtn.style.pointerEvents = 'none'; }
+        if (!readMenuOpen) {
+          readBtn.style.opacity = '0';
+          readBtn.style.pointerEvents = 'none';
+          readBtn.style.right = '-16px';
+        }
       }, 300);
+      startAutoHide();
     });
+
     readBtn.addEventListener('mouseenter', () => {
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-      readBtn.style.opacity = '1'; readTip.style.opacity = '1';
+      if (autoHideTimer) { clearTimeout(autoHideTimer); autoHideTimer = null; }
+      readBtn.style.opacity = '1';
+      readBtn.style.right = '0';
+      readTip.style.opacity = '1';
     });
     readBtn.addEventListener('mouseleave', () => {
       readTip.style.opacity = '0';
       if (!readMenuOpen) {
-        hideTimer = setTimeout(() => { readBtn.style.opacity = '0'; readBtn.style.pointerEvents = 'none'; }, 300);
+        hideTimer = setTimeout(() => {
+          readBtn.style.opacity = '0';
+          readBtn.style.pointerEvents = 'none';
+          readBtn.style.right = '-16px';
+        }, 300);
+      }
+      startAutoHide();
+    });
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeReadMenu();
+      if (contentMenuOpen) {
+        closeContentMenu();
+      } else {
+        btn.style.right = '0';
+        openContentMenu();
       }
     });
-    btn.addEventListener('click', (e) => { e.stopPropagation(); closeReadMenu(); contentMenuOpen ? closeContentMenu() : openContentMenu(); });
-    readBtn.addEventListener('click', (e) => { e.stopPropagation(); closeContentMenu(); readMenuOpen ? closeReadMenu() : openReadMenu(); });
+    readBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeContentMenu();
+      if (readMenuOpen) {
+        closeReadMenu();
+      } else {
+        readBtn.style.right = '0';
+        openReadMenu();
+      }
+    });
 
     mountPoint().appendChild(btn);
     mountPoint().appendChild(readBtn);
+
+    startAutoHide();
   }
+
 
   function updateContentButton() {
     const m = CONTENT_MAP[contentMode] || CONTENT_MAP.original;
@@ -727,6 +823,8 @@
   function openContentMenu() {
     if (contentMenuOpen) return;
     contentMenuOpen = true; closeReadMenu();
+    const btn = document.getElementById('__ca_content_btn__');
+    if (btn) { btn.style.right = '0'; }
     const old = document.getElementById('__ca_content_menu__');
     if (old) old.remove();
     const menu = document.createElement('div');
@@ -745,6 +843,8 @@
   function closeContentMenu() {
     const m = document.getElementById('__ca_content_menu__');
     if (m) m.remove(); contentMenuOpen = false;
+    const btn = document.getElementById('__ca_content_btn__');
+    if (btn) { btn.style.right = '-20px'; }
   }
 
   let bionicConfigOpen = false;
@@ -861,6 +961,8 @@
   function openReadMenu() {
     if (readMenuOpen) return;
     readMenuOpen = true; bionicConfigOpen = false; closeContentMenu();
+    const readBtn = document.getElementById('__ca_read_btn__');
+    if (readBtn) { readBtn.style.right = '0'; }
     const old = document.getElementById('__ca_read_menu__');
     if (old) old.remove();
     const menu = document.createElement('div');
@@ -925,8 +1027,12 @@
     const m = document.getElementById('__ca_read_menu__');
     if (m) m.remove(); readMenuOpen = false;
     const readBtn = document.getElementById('__ca_read_btn__');
-    if (readBtn && readActive.size === 0) {
-      readBtn.style.opacity = '0'; readBtn.style.pointerEvents = 'none';
+    if (readBtn) {
+      if (readActive.size === 0) {
+        readBtn.style.opacity = '0';
+        readBtn.style.pointerEvents = 'none';
+      }
+      readBtn.style.right = '-16px';
     }
   }
 
@@ -992,6 +1098,38 @@
     }
     rebuildReadStyle();
     updateReadButton();
+
+    // 快捷键支持
+    document.addEventListener('keydown', (e) => {
+      // Alt + 数字键切换内容对齐模式
+      if (e.altKey && !e.ctrlKey && !e.shiftKey) {
+        const keyMap = { '1': 'original', '2': 'center', '3': 'focus', '4': 'mouse-track' };
+        if (keyMap[e.key]) {
+          e.preventDefault();
+          applyContentMode(keyMap[e.key]);
+          closeContentMenu();
+          closeReadMenu();
+          return;
+        }
+        // Alt + 0: 关闭所有阅读辅助
+        if (e.key === '0') {
+          e.preventDefault();
+          toggleReadMode('read-off');
+          closeContentMenu();
+          closeReadMenu();
+          return;
+        }
+        // Alt + Q/W/E/R: 切换阅读辅助模式
+        const readKeyMap = { 'q': 'bionic', 'w': 'ruler', 'e': 'zebra', 'r': 'calm-bg' };
+        if (readKeyMap[e.key]) {
+          e.preventDefault();
+          toggleReadMode(readKeyMap[e.key]);
+          closeContentMenu();
+          closeReadMenu();
+          return;
+        }
+      }
+    }, { passive: false });
 
     let lastUrl = location.href;
     new MutationObserver(() => {
