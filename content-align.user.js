@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         网页内容对齐 + 阅读辅助
 // @namespace    https://github.com/SayHell0W0rld
-// @version      15.3.0
+// @version      16.0.0
 // @description  免受互联网时代的信息洪流干扰，聚精会神干好面前的每一件小事情：网页内容居中对齐（自动聚焦） + 阅读辅助（中英文仿生阅读、阅读尺、段落彩条等）
 // @author       SayHell0W0rld
 // @license      MIT
@@ -54,6 +54,7 @@
   let readActive = new Set();
   let readHandlers = [];
   let rulerEl = null;
+  let isApplyingBionic = false;
 
   // 节流：避免 mousemove 高频触发导致闪烁和性能问题
   function throttle(fn, ms) {
@@ -516,6 +517,9 @@
 
 
   function applyBionic() {
+    if (isApplyingBionic) return;
+    isApplyingBionic = true;
+    try {
     ensureReadStyle();
     rebuildReadStyle();
 
@@ -543,6 +547,7 @@
     }
 
     walkDOM(document.body);
+    } finally { isApplyingBionic = false; }
   }
 
   // ============================================================
@@ -1153,6 +1158,40 @@
         }, 500);
       }
     }).observe(document.body, { childList: true, subtree: true });
+
+    // 沉浸式翻译兼容：翻译完成后重新应用仿生阅读
+    let translateTimer = null;
+    const translateObserver = new MutationObserver((mutations) => {
+      if (isApplyingBionic) return;
+      if (!readActive.has('bionic')) return;
+
+      // 检测翻译插件添加的特征元素
+      const hasTranslateMarker = mutations.some(m => {
+        if (m.type !== 'childList') return false;
+        for (const node of m.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          if (node.classList && node.classList.contains('immersive-translate-target-wrapper')) return true;
+          if (node.querySelector && node.querySelector('.immersive-translate-target-wrapper')) return true;
+        }
+        return false;
+      });
+
+      if (hasTranslateMarker) {
+        if (translateTimer) clearTimeout(translateTimer);
+        translateTimer = setTimeout(() => {
+          if (!readActive.has('bionic')) return;
+          // 清理所有旧的仿生阅读
+          document.querySelectorAll('[data-ca-bionic]').forEach((el) => {
+            const parent = el.parentNode;
+            if (parent) { parent.replaceChild(document.createTextNode(el.textContent), el); parent.normalize(); }
+          });
+          // 重新应用仿生阅读
+          applyBionic();
+          rebuildReadStyle();
+        }, 500);
+      }
+    });
+    translateObserver.observe(document.body, { childList: true, subtree: true });
   }
 
   if (document.readyState === 'complete') init();
